@@ -24,7 +24,8 @@ func (s *DeviceSuite) TestNewDevice_InitialState() {
 	s.Equal(0, d.heartBeatsCount)
 	s.True(d.earliestHeartBeatTime.IsZero())
 	s.True(d.lastHeartBeatTime.IsZero())
-	s.Empty(d.uploadTimes)
+	s.Equal(int64(0), d.uploadTimesCount)
+	s.Equal(0.0, d.uploadTimeSum)
 }
 
 func (s *DeviceSuite) TestAddHeartBeat_FirstHeartbeatSetsEarliestAndLast() {
@@ -76,15 +77,15 @@ func (s *DeviceSuite) TestGetUpTime_MultipleHeartbeatsAcrossMinutes() {
 	s.Equal(150.0, d.GetUpTime())
 }
 
-func (s *DeviceSuite) TestAddStats_ValidValue_AppendsUploadTime() {
+func (s *DeviceSuite) TestAddStats_ValidValue_UpdatesCountAndSum() {
 	d := NewDevice("dev-1")
 	sentAt := time.Date(2026, 5, 4, 10, 0, 0, 0, time.UTC)
 
 	err := d.AddStats(sentAt, 100)
 
 	s.NoError(err)
-	s.Len(d.uploadTimes, 1)
-	s.Equal(int64(100), d.uploadTimes[0])
+	s.Equal(int64(1), d.uploadTimesCount)
+	s.Equal(100.0, d.uploadTimeSum)
 }
 
 func (s *DeviceSuite) TestAddStats_ZeroValue_ReturnsInvalidArgument() {
@@ -94,7 +95,8 @@ func (s *DeviceSuite) TestAddStats_ZeroValue_ReturnsInvalidArgument() {
 
 	s.Error(err)
 	s.ErrorIs(err, InvalidArgument)
-	s.Empty(d.uploadTimes)
+	s.Equal(int64(0), d.uploadTimesCount)
+	s.Equal(0.0, d.uploadTimeSum)
 }
 
 func (s *DeviceSuite) TestAddStats_NegativeValue_ReturnsInvalidArgument() {
@@ -104,7 +106,19 @@ func (s *DeviceSuite) TestAddStats_NegativeValue_ReturnsInvalidArgument() {
 
 	s.Error(err)
 	s.ErrorIs(err, InvalidArgument)
-	s.Empty(d.uploadTimes)
+	s.Equal(int64(0), d.uploadTimesCount)
+	s.Equal(0.0, d.uploadTimeSum)
+}
+
+func (s *DeviceSuite) TestAddStats_MultipleValues_AccumulatesCountAndSum() {
+	d := NewDevice("dev-1")
+
+	require.NoError(s.T(), d.AddStats(time.Now(), 100))
+	require.NoError(s.T(), d.AddStats(time.Now(), 200))
+	require.NoError(s.T(), d.AddStats(time.Now(), 300))
+
+	s.Equal(int64(3), d.uploadTimesCount)
+	s.Equal(600.0, d.uploadTimeSum)
 }
 
 func (s *DeviceSuite) TestGetUploadTimeAVG_NoStats_ReturnsZero() {
@@ -120,4 +134,12 @@ func (s *DeviceSuite) TestGetUploadTimeAVG_MultipleStats_ReturnsAverage() {
 	require.NoError(s.T(), d.AddStats(time.Now(), 300))
 
 	s.Equal(time.Duration(200), d.GetUploadTimeAVG())
+}
+
+func (s *DeviceSuite) TestGetUploadTimeAVG_SingleStat_ReturnsThatValue() {
+	d := NewDevice("dev-1")
+
+	require.NoError(s.T(), d.AddStats(time.Now(), 123456))
+
+	s.Equal(time.Duration(123456), d.GetUploadTimeAVG())
 }
