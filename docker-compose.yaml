@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fleet_app
+    expose:
+      - "6733"
+    networks:
+      - fleetnet
+
+  simulator:
+    image: ubuntu:22.04
+    container_name: fleet_simulator
+    working_dir: /workspace
+    depends_on:
+      - app
+    command: >
+      sh -c "
+      sleep 5 &&
+      chmod +x ./device-simulator-linux-arm64 &&
+      ./device-simulator-linux-arm64 --host app
+      "
+    volumes:
+      - ./:/workspace
+    networks:
+      - fleetnet
+    restart: on-failure:3
+
+networks:
+  fleetnet:
+    driver: bridge

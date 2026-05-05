@@ -1,0 +1,9 @@
+
+# Editor/IDE
+.idea/
+go.sum
+
+device-simulator**
+
+*.csv
+*.json
