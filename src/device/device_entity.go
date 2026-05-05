@@ -13,15 +13,17 @@ type Device struct {
 	heartBeatsCount       int
 	earliestHeartBeatTime time.Time
 	lastHeartBeatTime     time.Time
-	uploadTimes           []int64
-	heartBeatLock         sync.RWMutex
-	statsLock             sync.RWMutex
+
+	//uploadTimes   []int64
+	uploadTimesCount int64
+	uploadTimeSum    float64
+	heartBeatLock    sync.RWMutex
+	uploadTimeLock   sync.RWMutex
 }
 
 func NewDevice(id string) *Device {
 	return &Device{
-		id:          id,
-		uploadTimes: []int64{},
+		id: id,
 	}
 }
 
@@ -41,9 +43,10 @@ func (d *Device) AddStats(sentAt time.Time, value int64) error {
 	if value <= 0 {
 		return InvalidArgument
 	}
-	d.statsLock.Lock()
-	defer d.statsLock.Unlock()
-	d.uploadTimes = append(d.uploadTimes, value)
+	d.uploadTimeLock.Lock()
+	defer d.uploadTimeLock.Unlock()
+	d.uploadTimesCount += 1
+	d.uploadTimeSum += float64(value)
 	return nil
 }
 
@@ -59,17 +62,12 @@ func (d *Device) GetUpTime() float64 {
 }
 
 func (d *Device) GetUploadTimeAVG() time.Duration {
-	d.statsLock.RLock()
-	defer d.statsLock.RUnlock()
-	if len(d.uploadTimes) == 0 {
+	d.uploadTimeLock.RLock()
+	defer d.uploadTimeLock.RUnlock()
+	if d.uploadTimesCount == 0 {
 		return 0
 	}
 
-	var total int64
-	for _, v := range d.uploadTimes {
-		total += v
-	}
-
-	avgNanoseconds := total / int64(len(d.uploadTimes))
+	avgNanoseconds := d.uploadTimeSum / float64(d.uploadTimesCount)
 	return time.Duration(avgNanoseconds)
 }
