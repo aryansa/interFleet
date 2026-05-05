@@ -33,7 +33,6 @@ It reads a `devices.csv` file on startup, accepts heartbeats and upload stats fo
 
 ```
 ### File overview
-The projects follow object-oriented ports and adaptors (hexagonal) architecture structure.
 * `main.go`
   Application entry point. Reads CLI flags and starts the app.
 
@@ -62,6 +61,7 @@ The projects follow object-oriented ports and adaptors (hexagonal) architecture 
   Generated test mocks.
 
 ---
+
 
 
 ## Configuration
@@ -173,12 +173,37 @@ This will:
 * verify the simulator binary name in `docker-compose.yml`
 * verify the simulator command-line arguments match the simulator you downloaded
 * verify `devices.csv` is present
-
----
-
-## Notes
-
 * If the CSV file is missing or invalid, startup will fail.
 * For Docker-based runs, keep input files in expected locations unless you update the runtime configuration.
 
 ---
+
+
+
+## Write-Up
+
+This project follows a ports-and-adapters, or hexagonal, structure. The device domain sits at the center, while HTTP delivery and CSV persistence are implemented as adapters around it. That keeps the core logic focused on the business rules instead of framework or storage details, which is one of the main goals of hexagonal architecture.
+
+I spent approximately 5 hours end-to-end on this project.
+
+A related design choice in the implementation is **dependency injection**.
+In practice, the command handler depends on a repository interface defined in `ports.go`, 
+not on a concrete CSV repository implementation. 
+That makes the application easier to change and easier to test, 
+because the business logic depends on abstractions rather than infrastructure details.
+This style is closely aligned with dependency composition, where object graphs are assembled at the application boundary rather than hidden inside the objects themselves.)
+
+This also improved the unit testing story. Because the handlers depend on ports rather than concrete implementations, I was able to generate and use mocks for the repository in handler tests.
+In other words, the ports pattern made the unit tests more isolated and easier to reason about.
+
+### Runtime Complexity
+
+At startup, the application reads the device definitions from `devices.csv` and inserts them into an in-memory Go map. If there are **N** devices, startup time is **O(N)**, and repository memory usage is also **O(N)**.
+
+For request handling:
+
+* **Device lookup by ID** is average **O(1)** since devices are stored in a Go map keyed by device ID.
+* **Adding a heartbeat** is **O(1)**, since it updates only counters and timestamps on the device.
+* **Adding upload stats** is **O(1)**, because the implementation maintains only a running sum and count for upload times instead of storing the entire list of samples.
+* **Calculating average upload time** is **O(1)** per read, because the average is derived from the stored running sum and count instead of scanning all previous upload samples.
+* **Calculating uptime** is **O(1)** in the current design, since it uses already stored timestamps and counters rather than iterating through historical heartbeat events.
